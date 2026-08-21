@@ -1,0 +1,978 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>👻 NIGHT SHOOTER - HANTU URBAN</title>
+    <style>
+        /* ===== RESET & GLOBAL ===== */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            user-select: none;
+        }
+        body {
+            min-height: 100vh;
+            background: #0a0808;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-family: 'Courier New', monospace;
+        }
+        .game-wrapper {
+            background: #0f0c0a;
+            padding: 18px;
+            border-radius: 28px;
+            border: 1px solid #3a2a1a;
+            box-shadow: 0 0 60px rgba(200, 80, 30, 0.25), 0 0 120px rgba(200, 50, 20, 0.08);
+        }
+        #gameCanvas {
+            display: block;
+            width: 900px;
+            height: 600px;
+            border-radius: 18px;
+            cursor: none;
+            background: #1a100c;
+            box-shadow: inset 0 0 80px rgba(0, 0, 0, 0.8);
+        }
+        /* ===== UI BAR ===== */
+        .ui-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 14px;
+            padding: 0 8px;
+            color: #c0a898;
+            font-weight: bold;
+            font-size: 17px;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+        .ui-box {
+            background: rgba(10, 6, 4, 0.85);
+            padding: 6px 22px;
+            border-radius: 40px;
+            border: 1px solid #3a2a1a;
+            box-shadow: inset 0 0 20px rgba(0, 0, 0, 0.8);
+            backdrop-filter: blur(2px);
+        }
+        .ui-box span {
+            color: #e0c8b0;
+        }
+        #scoreDisplay {
+            color: #f0d8b0;
+            font-size: 24px;
+            margin-left: 8px;
+        }
+        #healthDisplay {
+            color: #ff6a4a;
+            font-size: 24px;
+            margin-left: 8px;
+        }
+        #levelDisplay {
+            color: #b0d0ff;
+            font-size: 20px;
+            margin-left: 8px;
+        }
+        .restart-btn {
+            background: #1f100a;
+            border: 1px solid #4a2a1a;
+            color: #d0b8a0;
+            padding: 6px 24px;
+            border-radius: 40px;
+            font-family: 'Courier New', monospace;
+            font-weight: bold;
+            font-size: 15px;
+            cursor: pointer;
+            transition: 0.25s;
+            box-shadow: 0 0 15px rgba(100, 30, 15, 0.25);
+        }
+        .restart-btn:hover {
+            background: #2f1810;
+            color: #ffe0c0;
+            border-color: #8a3a2a;
+            box-shadow: 0 0 35px rgba(200, 50, 20, 0.5);
+            transform: scale(1.03);
+        }
+        /* ===== RESPONSIVE ===== */
+        @media (max-width: 960px) {
+            .game-wrapper {
+                padding: 10px;
+            }
+            #gameCanvas {
+                width: 100%;
+                height: auto;
+                aspect-ratio: 900/600;
+            }
+            .ui-bar {
+                font-size: 13px;
+                justify-content: center;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="game-wrapper">
+        <canvas id="gameCanvas" width="900" height="600"></canvas>
+        <div class="ui-bar">
+            <div class="ui-box">🎯 SCORE <span id="scoreDisplay">0</span></div>
+            <div class="ui-box">📈 LEVEL <span id="levelDisplay">1</span></div>
+            <div class="ui-box">🩸 HEALTH <span id="healthDisplay">5</span></div>
+            <button class="restart-btn" id="restartBtn">↻ RESPAWN</button>
+        </div>
+    </div>
+
+    <script>
+        // ================================================================
+        //  NIGHT SHOOTER — HANTU URBAN (VERSI DIPERKAYA)
+        //  Background: Gedung malam 42NDST. @gbergphoto
+        //  Musuh: Hantu dengan variasi (kecil, besar, cepat)
+        //  Efek: Hujan, kilat, partikel kompleks, screen shake, glow
+        // ================================================================
+
+        // ---- KONSTANTA ----
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const W = 900,
+            H = 600;
+
+        // ---- ELEMEN UI ----
+        const scoreSpan = document.getElementById('scoreDisplay');
+        const healthSpan = document.getElementById('healthDisplay');
+        const levelSpan = document.getElementById('levelDisplay');
+
+        // ---- GAME STATE ----
+        let score = 0,
+            health = 5,
+            level = 1,
+            gameOver = false;
+        let spawnCounter = 0,
+            spawnDelay = 40,
+            screenShake = 0,
+            frameCount = 0;
+        const player = { x: 450, y: 300, radius: 10 };
+
+        // ---- ARRAY OBJEK ----
+        let enemies = [];
+        let particles = [];
+        let bullets = [];
+        let floatingTexts = [];
+        let rainDrops = [];
+        let lightningFlashes = [];
+
+        // ---- INISIALISASI HUJAN ----
+        for (let i = 0; i < 150; i++) {
+            rainDrops.push({
+                x: Math.random() * W,
+                y: Math.random() * H,
+                speed: 4 + Math.random() * 6,
+                length: 10 + Math.random() * 15,
+                opacity: 0.1 + Math.random() * 0.3,
+            });
+        }
+
+        // ================================================================
+        //  1.  BACKGROUND (GEDUNG MALAM + HUJAN + KILAT)
+        // ================================================================
+        function drawBackground() {
+            // ---- Langit malam ----
+            const skyGrad = ctx.createLinearGradient(0, 0, 0, H);
+            skyGrad.addColorStop(0, '#0b0a12');
+            skyGrad.addColorStop(0.3, '#181420');
+            skyGrad.addColorStop(0.6, '#1f1820');
+            skyGrad.addColorStop(0.85, '#141018');
+            skyGrad.addColorStop(1, '#0a0808');
+            ctx.fillStyle = skyGrad;
+            ctx.fillRect(0, 0, W, H);
+
+            // ---- Bintang (berkedip) ----
+            ctx.fillStyle = '#4a4a5a';
+            ctx.globalAlpha = 0.25;
+            for (let i = 0; i < 80; i++) {
+                const twinkle = 0.5 + Math.sin(Date.now() * 0.001 + i * 2) * 0.5;
+                ctx.globalAlpha = 0.1 + twinkle * 0.3;
+                ctx.beginPath();
+                ctx.arc(15 + i * 12 + Math.sin(i) * 8, 10 + i * 4 + Math.cos(i * 0.7) * 6, 0.6 + Math.random() * 1.2, 0, Math.PI *
+                2);
+                ctx.fill();
+            }
+            ctx.globalAlpha = 1;
+
+            // ---- Gedung-gedung ----
+            const buildings = [
+                [10, 55, 280],
+                [70, 40, 340],
+                [115, 60, 210],
+                [180, 45, 380],
+                [230, 55, 260],
+                [290, 40, 400],
+                [335, 65, 190],
+                [405, 50, 350],
+                [460, 40, 420],
+                [505, 55, 280],
+                [565, 45, 370],
+                [615, 60, 200],
+                [680, 50, 390],
+                [735, 40, 310],
+                [780, 55, 440],
+                [840, 45, 250]
+            ];
+
+            for (const [x, w, h] of buildings) {
+                // Badan gedung
+                ctx.fillStyle = '#1a1418';
+                ctx.shadowColor = '#0a0808';
+                ctx.shadowBlur = 30;
+                ctx.fillRect(x, H - h, w, h);
+
+                // Jendela
+                ctx.shadowBlur = 8;
+                ctx.shadowColor = '#ffaa55';
+                for (let r = 0; r < Math.floor(h / 28); r++) {
+                    for (let c = 0; c < Math.floor(w / 18); c++) {
+                        if (Math.random() > 0.35) {
+                            const bright = 0.15 + Math.random() * 0.4;
+                            ctx.fillStyle = `rgba(255, 200, 150, ${bright})`;
+                            ctx.fillRect(x + 4 + c * 18, H - h + 8 + r * 28, 8, 12);
+                        }
+                    }
+                }
+            }
+            ctx.shadowBlur = 0;
+
+            // ---- Kabut tipis di bawah ----
+            ctx.globalAlpha = 0.07;
+            ctx.fillStyle = '#6a5a4a';
+            for (let i = 0; i < 25; i++) {
+                ctx.beginPath();
+                ctx.arc(30 + i * 38, 570 + i * 1.5, 140 + i * 6, 0, Math.PI * 2);
+                ctx.fill();
+            }
+            ctx.globalAlpha = 1;
+
+            // ---- Teks "42NDST." & kredit ----
+            ctx.font = 'bold 22px "Courier New", monospace';
+            ctx.fillStyle = '#5a4a3a';
+            ctx.globalAlpha = 0.5;
+            ctx.fillText('42NDST.', 780, 40);
+            ctx.font = '12px "Courier New", monospace';
+            ctx.fillText('@gbergphoto', 820, 60);
+            ctx.globalAlpha = 1;
+
+            // ---- Lampu jalan (sorotan) ----
+            ctx.shadowBlur = 80;
+            ctx.shadowColor = '#ff8833';
+            ctx.fillStyle = 'rgba(255, 180, 80, 0.03)';
+            ctx.fillRect(0, 520, W, 80);
+            ctx.shadowBlur = 0;
+
+            // ---- HUJAN ----
+            for (const drop of rainDrops) {
+                ctx.strokeStyle = `rgba(180, 200, 255, ${drop.opacity * 0.5})`;
+                ctx.lineWidth = 1.2;
+                ctx.beginPath();
+                ctx.moveTo(drop.x, drop.y);
+                ctx.lineTo(drop.x - 4, drop.y + drop.length);
+                ctx.stroke();
+                drop.y += drop.speed;
+                drop.x -= 0.8;
+                if (drop.y > H) {
+                    drop.y = -drop.length;
+                    drop.x = Math.random() * W;
+                }
+                if (drop.x < -10) drop.x = W + 10;
+            }
+
+            // ---- KILAT (efek sesaat) ----
+            if (lightningFlashes.length > 0) {
+                for (let i = lightningFlashes.length - 1; i >= 0; i--) {
+                    const flash = lightningFlashes[i];
+                    ctx.fillStyle = `rgba(255, 255, 255, ${flash.opacity})`;
+                    ctx.fillRect(0, 0, W, H);
+                    flash.opacity *= 0.9;
+                    if (flash.opacity < 0.01) lightningFlashes.splice(i, 1);
+                }
+            } else if (Math.random() < 0.001) {
+                // Muncul kilat acak
+                lightningFlashes.push({ opacity: 0.6 + Math.random() * 0.3 });
+            }
+        }
+
+        // ================================================================
+        //  2.  SPAWN HANTU (VARIASI)
+        // ================================================================
+        function spawnEnemy() {
+            if (gameOver) return;
+            const maxEnemies = Math.min(6 + level * 2, 30);
+            if (enemies.length >= maxEnemies) return;
+
+            const side = Math.floor(Math.random() * 4);
+            let x, y;
+            const pad = 60;
+            if (side === 0) { x = Math.random() * W;
+                y = -pad; } else if (side === 1) { x = W + pad;
+                y = Math.random() * H; } else if (side === 2) { x = Math.random() * W;
+                y = H + pad; } else { x = -pad;
+                y = Math.random() * H; }
+
+            // ---- TIPE HANTU ----
+            const types = ['normal', 'small', 'big', 'fast'];
+            let type = types[Math.floor(Math.random() * types.length)];
+            // Di level tinggi, lebih banyak hantu cepat & big
+            if (level > 5 && Math.random() < 0.3) type = 'fast';
+            if (level > 8 && Math.random() < 0.3) type = 'big';
+
+            let radius, speed, healthMult, color;
+            switch (type) {
+                case 'small':
+                    radius = 16 + Math.random() * 6;
+                    speed = 1.2 + level * 0.2 + Math.random() * 0.4;
+                    healthMult = 0.6;
+                    color = 'hsla(200, 70%, 75%, ';
+                    break;
+                case 'big':
+                    radius = 38 + Math.random() * 8;
+                    speed = 0.6 + level * 0.15 + Math.random() * 0.3;
+                    healthMult = 2.0;
+                    color = 'hsla(220, 80%, 60%, ';
+                    break;
+                case 'fast':
+                    radius = 22 + Math.random() * 6;
+                    speed = 2.0 + level * 0.3 + Math.random() * 0.6;
+                    healthMult = 0.8;
+                    color = 'hsla(190, 90%, 70%, ';
+                    break;
+                default: // normal
+                    radius = 24 + Math.random() * 8;
+                    speed = 0.9 + level * 0.2 + Math.random() * 0.4;
+                    healthMult = 1.0;
+                    color = 'hsla(210, 70%, 70%, ';
+            }
+
+            const ang = Math.atan2(300 - y, 450 - x);
+            enemies.push({
+                x,
+                y,
+                vx: Math.cos(ang) * speed,
+                vy: Math.sin(ang) * speed,
+                radius: radius,
+                type: type,
+                healthMult: healthMult,
+                phase: Math.random() * Math.PI * 2,
+                floatAmp: 0.3 + Math.random() * 0.7,
+                floatSpeed: 1.2 + Math.random() * 1.8,
+                alpha: 0.5 + Math.random() * 0.4,
+                glow: 0.2 + Math.random() * 0.3,
+                colorBase: color,
+                hitFlash: 0,
+                // Untuk hantu besar: spawn minion saat mati
+                spawnMinion: (type === 'big' && level > 3),
+            });
+        }
+
+        // ================================================================
+        //  3.  TEMBAK
+        // ================================================================
+        function handleShoot(e) {
+            if (gameOver) return;
+
+            const rect = canvas.getBoundingClientRect();
+            const scaleX = W / rect.width;
+            const scaleY = H / rect.height;
+
+            let mx, my;
+            if (e.touches) {
+                const t = e.touches[0];
+                mx = (t.clientX - rect.left) * scaleX;
+                my = (t.clientY - rect.top) * scaleY;
+                e.preventDefault();
+            } else {
+                mx = (e.clientX - rect.left) * scaleX;
+                my = (e.clientY - rect.top) * scaleY;
+            }
+            mx = Math.min(W, Math.max(0, mx));
+            my = Math.min(H, Math.max(0, my));
+
+            player.x = mx;
+            player.y = my;
+            screenShake = 6;
+
+            // ---- Partikel tembakan ----
+            for (let i = 0; i < 18; i++) {
+                const a = Math.random() * 2 * Math.PI;
+                const d = 4 + Math.random() * 22;
+                particles.push({
+                    x: mx,
+                    y: my,
+                    vx: Math.cos(a) * d * 0.7,
+                    vy: Math.sin(a) * d * 0.7 - 1.2,
+                    life: 1,
+                    decay: 0.015 + Math.random() * 0.03,
+                    radius: 2 + Math.random() * 5,
+                    color: `hsl(35, 95%, ${65 + Math.random() * 30}%)`,
+                    type: 'spark',
+                });
+            }
+
+            // ---- Proyektil (bullet) ----
+            bullets.push({
+                x: mx,
+                y: my,
+                vx: 0,
+                vy: 0,
+                radius: 7,
+                life: 1,
+                color: '#ffdd77',
+                trail: [],
+            });
+
+            // ---- Deteksi tembakan ke hantu ----
+            for (let i = enemies.length - 1; i >= 0; i--) {
+                const e = enemies[i];
+                const dist = Math.hypot(mx - e.x, my - e.y);
+                const hitRadius = e.radius * 0.65;
+
+                if (dist < hitRadius + 10) {
+                    // Kurangi health (untuk hantu besar butuh 2 tembakan)
+                    e.healthMult -= 0.5;
+                    e.hitFlash = 10;
+
+                    if (e.healthMult <= 0) {
+                        // ---- HANTU MATI ----
+                        // Ledakan partikel
+                        const color = e.colorBase.replace('hsla', 'hsl').replace(', ', ',').replace(')', ',0.8)');
+                        for (let j = 0; j < 40; j++) {
+                            const a = Math.random() * 2 * Math.PI;
+                            const s = 2 + Math.random() * 8;
+                            particles.push({
+                                x: e.x,
+                                y: e.y,
+                                vx: Math.cos(a) * s,
+                                vy: Math.sin(a) * s - 1,
+                                life: 1,
+                                decay: 0.008 + Math.random() * 0.025,
+                                radius: 3 + Math.random() * 12,
+                                color: color,
+                                type: 'ghostBurst',
+                            });
+                        }
+
+                        // Floating text "+1"
+                        floatingTexts.push({
+                            x: e.x,
+                            y: e.y - 20,
+                            text: '+1',
+                            life: 1,
+                            vy: -1.5,
+                            color: '#ffdd88',
+                        });
+
+                        // Hantu besar spawn minion
+                        if (e.spawnMinion) {
+                            for (let m = 0; m < 3; m++) {
+                                setTimeout(() => {
+                                    if (gameOver) return;
+                                    const ang2 = Math.random() * 2 * Math.PI;
+                                    const dist2 = 40 + Math.random() * 60;
+                                    enemies.push({
+                                        x: e.x + Math.cos(ang2) * dist2,
+                                        y: e.y + Math.sin(ang2) * dist2,
+                                        vx: Math.cos(ang2) * 0.5,
+                                        vy: Math.sin(ang2) * 0.5,
+                                        radius: 16 + Math.random() * 6,
+                                        type: 'small',
+                                        healthMult: 0.6,
+                                        phase: Math.random() * Math.PI * 2,
+                                        floatAmp: 0.4 + Math.random() * 0.5,
+                                        floatSpeed: 1.5 + Math.random() * 1.5,
+                                        alpha: 0.6 + Math.random() * 0.3,
+                                        glow: 0.2 + Math.random() * 0.2,
+                                        colorBase: 'hsla(200, 70%, 75%, ',
+                                        hitFlash: 0,
+                                        spawnMinion: false,
+                                    });
+                                }, 100 + m * 150);
+                            }
+                        }
+
+                        enemies.splice(i, 1);
+                        score++;
+                        const newLevel = Math.floor(score / 8) + 1;
+                        if (newLevel > level) {
+                            level = newLevel;
+                            spawnDelay = Math.max(8, 40 - level * 2);
+                            // Efek level up
+                            floatingTexts.push({
+                                x: 450,
+                                y: 200,
+                                text: `⚡ LEVEL ${level}!`,
+                                life: 2,
+                                vy: -0.8,
+                                color: '#88ddff',
+                                big: true,
+                            });
+                            // Kilat saat level up
+                            lightningFlashes.push({ opacity: 0.8 });
+                        }
+                        updateUI();
+                        break;
+                    } else {
+                        // Hantu masih hidup (butuh tembakan lagi)
+                        floatingTexts.push({
+                            x: e.x,
+                            y: e.y - 30,
+                            text: '💥',
+                            life: 0.6,
+                            vy: -1,
+                            color: '#ff8844',
+                        });
+                        break;
+                    }
+                }
+            }
+        }
+
+        // ================================================================
+        //  4.  UPDATE UI
+        // ================================================================
+        function updateUI() {
+            scoreSpan.textContent = score;
+            healthSpan.textContent = health;
+            levelSpan.textContent = level;
+        }
+
+        // ================================================================
+        //  5.  RESTART
+        // ================================================================
+        function restartGame() {
+            score = 0;
+            health = 5;
+            level = 1;
+            spawnDelay = 40;
+            gameOver = false;
+            enemies = [];
+            particles = [];
+            bullets = [];
+            floatingTexts = [];
+            lightningFlashes = [];
+            player.x = 450;
+            player.y = 300;
+            screenShake = 0;
+            updateUI();
+        }
+
+        // ================================================================
+        //  6.  UPDATE LOOP
+        // ================================================================
+        function update() {
+            frameCount++;
+            if (gameOver) return;
+
+            // ---- Spawn hantu ----
+            spawnCounter++;
+            if (spawnCounter >= spawnDelay) {
+                spawnCounter = 0;
+                spawnEnemy();
+                if (level > 4 && Math.random() < 0.25) spawnEnemy();
+                if (level > 8 && Math.random() < 0.3) spawnEnemy();
+                if (level > 12 && Math.random() < 0.25) spawnEnemy();
+            }
+
+            // ---- Gerakkan hantu ----
+            for (let i = enemies.length - 1; i >= 0; i--) {
+                const e = enemies[i];
+
+                // Efek terapung
+                const floatOffset = Math.sin(frameCount * 0.02 * e.floatSpeed + e.phase) * e.floatAmp * 0.3;
+                e.x += e.vx * 0.8;
+                e.y += e.vy * 0.8 + floatOffset * 0.15;
+
+                // Homing ke player
+                const ang = Math.atan2(player.y - e.y, player.x - e.x);
+                e.vx += Math.cos(ang) * 0.035 * level * 0.2;
+                e.vy += Math.sin(ang) * 0.035 * level * 0.2;
+
+                const maxSpd = 1.6 + level * 0.2 + (e.type === 'fast' ? 0.8 : 0);
+                const spd = Math.hypot(e.vx, e.vy);
+                if (spd > maxSpd) {
+                    e.vx = (e.vx / spd) * maxSpd;
+                    e.vy = (e.vy / spd) * maxSpd;
+                }
+
+                // Hit flash
+                if (e.hitFlash > 0) e.hitFlash--;
+
+                // Tabrakan dengan player
+                const distToPlayer = Math.hypot(e.x - player.x, e.y - player.y);
+                if (distToPlayer < e.radius + player.radius) {
+                    health--;
+                    updateUI();
+                    screenShake = 12;
+                    for (let j = 0; j < 25; j++) {
+                        const a = Math.random() * 2 * Math.PI;
+                        const s = 2 + Math.random() * 6;
+                        particles.push({
+                            x: player.x,
+                            y: player.y,
+                            vx: Math.cos(a) * s,
+                            vy: Math.sin(a) * s - 1,
+                            life: 1,
+                            decay: 0.015 + Math.random() * 0.025,
+                            radius: 3 + Math.random() * 9,
+                            color: `hsla(0, 90%, ${25 + Math.random() * 30}%, 0.8)`,
+                            type: 'blood',
+                        });
+                    }
+                    enemies.splice(i, 1);
+                    if (health <= 0) {
+                        health = 0;
+                        gameOver = true;
+                        updateUI();
+                        // Efek game over
+                        for (let j = 0; j < 60; j++) {
+                            const a = Math.random() * 2 * Math.PI;
+                            const s = 3 + Math.random() * 10;
+                            particles.push({
+                                x: player.x,
+                                y: player.y,
+                                vx: Math.cos(a) * s,
+                                vy: Math.sin(a) * s - 2,
+                                life: 1.5,
+                                decay: 0.005 + Math.random() * 0.015,
+                                radius: 4 + Math.random() * 14,
+                                color: `hsla(0, 90%, ${30 + Math.random() * 40}%, 0.9)`,
+                                type: 'blood',
+                            });
+                        }
+                    }
+                    continue;
+                }
+
+                // Keluar canvas? respawn di sisi lain
+                if (e.x < -120 || e.x > W + 120 || e.y < -120 || e.y > H + 120) {
+                    const side2 = Math.floor(Math.random() * 4);
+                    if (side2 === 0) { e.x = Math.random() * W;
+                        e.y = -40; } else if (side2 === 1) { e.x = W + 40;
+                        e.y = Math.random() * H; } else if (side2 === 2) { e.x = Math.random() * W;
+                        e.y = H + 40; } else { e.x = -40;
+                        e.y = Math.random() * H; }
+                    const a2 = Math.atan2(300 - e.y, 450 - e.x);
+                    const spd2 = 0.8 + level * 0.15 + (e.type === 'fast' ? 0.6 : 0);
+                    e.vx = Math.cos(a2) * spd2;
+                    e.vy = Math.sin(a2) * spd2;
+                }
+            }
+
+            // ---- Update bullet ----
+            for (let i = bullets.length - 1; i >= 0; i--) {
+                const b = bullets[i];
+                b.x += b.vx;
+                b.y += b.vy;
+                b.life -= 0.025;
+                if (b.life <= 0) bullets.splice(i, 1);
+            }
+
+            // ---- Update partikel ----
+            for (let i = particles.length - 1; i >= 0; i--) {
+                const p = particles[i];
+                p.x += p.vx;
+                p.y += p.vy;
+                p.vy += 0.05;
+                p.vx *= 0.98;
+                p.vy *= 0.98;
+                p.life -= p.decay;
+                if (p.life <= 0) particles.splice(i, 1);
+            }
+            if (particles.length > 600) particles.splice(0, particles.length - 600);
+
+            // ---- Update floating text ----
+            for (let i = floatingTexts.length - 1; i >= 0; i--) {
+                const ft = floatingTexts[i];
+                ft.y += ft.vy;
+                ft.life -= 0.015;
+                if (ft.life <= 0) floatingTexts.splice(i, 1);
+            }
+
+            // ---- Screen shake ----
+            if (screenShake > 0) screenShake *= 0.92;
+            if (screenShake < 0.1) screenShake = 0;
+        }
+
+        // ================================================================
+        //  7.  DRAW
+        // ================================================================
+        function draw() {
+            ctx.save();
+
+            // Screen shake
+            if (screenShake > 0.5) {
+                ctx.translate(
+                    (Math.random() - 0.5) * screenShake * 1.8,
+                    (Math.random() - 0.5) * screenShake * 1.8
+                );
+            }
+
+            // ---- Background ----
+            drawBackground();
+
+            // ---- Partikel (di atas background) ----
+            for (const p of particles) {
+                ctx.globalAlpha = p.life * 0.9;
+                ctx.shadowBlur = p.type === 'blood' ? 10 : 20;
+                ctx.shadowColor = p.type === 'blood' ? '#ff4422' : '#ff6633';
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, p.radius * p.life, 0, Math.PI * 2);
+                ctx.fillStyle = p.color || '#cc5533';
+                ctx.fill();
+            }
+            ctx.globalAlpha = 1;
+            ctx.shadowBlur = 0;
+
+            // ---- Bullet (proyektil) ----
+            for (const b of bullets) {
+                ctx.shadowBlur = 30;
+                ctx.shadowColor = '#ffaa44';
+                ctx.fillStyle = b.color;
+                ctx.beginPath();
+                ctx.arc(b.x, b.y, b.radius * b.life, 0, Math.PI * 2);
+                ctx.fill();
+                // Glow luar
+                const grad = ctx.createRadialGradient(b.x, b.y, 2, b.x, b.y, b.radius * 3);
+                grad.addColorStop(0, 'rgba(255, 220, 100, 0.3)');
+                grad.addColorStop(1, 'rgba(255, 220, 100, 0)');
+                ctx.fillStyle = grad;
+                ctx.beginPath();
+                ctx.arc(b.x, b.y, b.radius * 3, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.shadowBlur = 0;
+            }
+
+            // ---- HANTU ----
+            for (const e of enemies) {
+                const r = e.radius;
+                const isHit = e.hitFlash > 0;
+
+                // Glow
+                const grad = ctx.createRadialGradient(e.x, e.y, 2, e.x, e.y, r * 1.8);
+                const glowColor = e.colorBase.replace('hsla', 'hsla').replace(', ', ',').replace(')', `,${e.alpha * 0.3})`);
+                grad.addColorStop(0, glowColor);
+                grad.addColorStop(0.4, e.colorBase.replace('hsla', 'hsla').replace(', ', ',').replace(')',
+                    `,${e.alpha * 0.1})`));
+                grad.addColorStop(1, 'rgba(0,0,0,0)');
+                ctx.fillStyle = grad;
+                ctx.beginPath();
+                ctx.arc(e.x, e.y, r * 1.8, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Badan hantu
+                ctx.shadowColor = isHit ? 'rgba(255,255,255,0.8)' : 'rgba(100, 150, 255, 0.5)';
+                ctx.shadowBlur = isHit ? 60 : 40;
+                const bodyColor = isHit ?
+                    `rgba(255, 255, 255, ${e.alpha})` :
+                    e.colorBase + e.alpha + ')';
+                ctx.fillStyle = bodyColor;
+                ctx.beginPath();
+                ctx.arc(e.x, e.y, r, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Ekor hantu (bergelombang)
+                ctx.fillStyle = isHit ?
+                    `rgba(255, 255, 255, ${e.alpha * 0.6})` :
+                    e.colorBase + (e.alpha * 0.5) + ')';
+                ctx.shadowBlur = 20;
+                ctx.beginPath();
+                ctx.moveTo(e.x - r * 0.6, e.y + r * 0.25);
+                for (let t = 0; t <= 1; t += 0.04) {
+                    const waveX = e.x + Math.sin(t * 8 + frameCount * 0.04 + e.phase) * r * 0.35;
+                    const waveY = e.y + r * 0.25 + t * r * 0.75;
+                    ctx.lineTo(waveX, waveY);
+                }
+                ctx.lineTo(e.x + r * 0.6, e.y + r * 0.25);
+                ctx.closePath();
+                ctx.fill();
+
+                // Mata (merah menyala)
+                ctx.shadowBlur = isHit ? 50 : 30;
+                ctx.shadowColor = isHit ? '#ffffff' : '#ff3333';
+                ctx.fillStyle = isHit ? '#ffffff' : '#ff1a1a';
+                ctx.beginPath();
+                ctx.arc(e.x - r * 0.3, e.y - r * 0.15, r * 0.18, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.beginPath();
+                ctx.arc(e.x + r * 0.3, e.y - r * 0.15, r * 0.18, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Pupil
+                ctx.shadowBlur = 5;
+                ctx.fillStyle = isHit ? 'rgba(200,0,0,0.8)' : 'rgba(255,255,255,0.6)';
+                ctx.beginPath();
+                ctx.arc(e.x - r * 0.32, e.y - r * 0.2, r * 0.06, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.beginPath();
+                ctx.arc(e.x + r * 0.28, e.y - r * 0.2, r * 0.06, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Mulut
+                ctx.shadowBlur = 10;
+                ctx.strokeStyle = isHit ? 'rgba(255,255,255,0.8)' : `hsla(0, 60%, 30%, ${e.alpha})`;
+                ctx.lineWidth = 2.5;
+                ctx.beginPath();
+                ctx.arc(e.x, e.y + r * 0.1, r * 0.3, 0.1, Math.PI - 0.1);
+                ctx.stroke();
+
+                // Tipe label (untuk debug, opsional)
+                ctx.shadowBlur = 0;
+                ctx.font = '10px monospace';
+                ctx.fillStyle = 'rgba(255,255,255,0.2)';
+                ctx.textAlign = 'center';
+                ctx.fillText(e.type, e.x, e.y - r - 10);
+                ctx.textAlign = 'left';
+                ctx.shadowBlur = 0;
+            }
+
+            // ---- PLAYER (CROSSHAIR HORROR) ----
+            const px = player.x,
+                py = player.y;
+
+            // Lingkaran luar
+            ctx.shadowColor = '#ff4400';
+            ctx.shadowBlur = 35;
+            ctx.strokeStyle = 'rgba(255, 200, 150, 0.8)';
+            ctx.lineWidth = 2.5;
+            ctx.beginPath();
+            ctx.arc(px, py, player.radius + 8, 0, Math.PI * 2);
+            ctx.stroke();
+
+            // Salib
+            ctx.shadowBlur = 25;
+            ctx.strokeStyle = 'rgba(255, 200, 150, 0.9)';
+            ctx.lineWidth = 3;
+            const s = 20;
+            ctx.beginPath();
+            ctx.moveTo(px - s, py);
+            ctx.lineTo(px + s, py);
+            ctx.moveTo(px, py - s);
+            ctx.lineTo(px, py + s);
+            ctx.stroke();
+
+            // Titik merah di tengah
+            ctx.shadowBlur = 40;
+            ctx.shadowColor = '#ff2200';
+            ctx.fillStyle = '#ff3333';
+            ctx.beginPath();
+            ctx.arc(px, py, 5, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Simbol horror
+            ctx.shadowBlur = 0;
+            ctx.font = '18px "Courier New", monospace';
+            ctx.fillStyle = 'rgba(200, 80, 50, 0.35)';
+            ctx.fillText('☠️', px + 25, py - 25);
+            ctx.fillText('☠️', px - 45, py + 30);
+            ctx.shadowBlur = 0;
+
+            // ---- Floating Text ----
+            for (const ft of floatingTexts) {
+                ctx.globalAlpha = ft.life;
+                ctx.font = ft.big ? 'bold 40px monospace' : 'bold 24px monospace';
+                ctx.textAlign = 'center';
+                ctx.shadowBlur = 30;
+                ctx.shadowColor = '#ffaa44';
+                ctx.fillStyle = ft.color || '#ffffff';
+                ctx.fillText(ft.text, ft.x, ft.y);
+                ctx.textAlign = 'left';
+                ctx.shadowBlur = 0;
+            }
+            ctx.globalAlpha = 1;
+
+            // ---- GAME OVER ----
+            if (gameOver) {
+                ctx.fillStyle = 'rgba(8, 0, 0, 0.78)';
+                ctx.fillRect(0, 0, W, H);
+                ctx.font = 'bold 72px "Courier New", monospace';
+                ctx.fillStyle = '#cc2222';
+                ctx.shadowColor = '#ff0000';
+                ctx.shadowBlur = 80;
+                ctx.textAlign = 'center';
+                ctx.fillText('☠️ GAME OVER ☠️', 450, 250);
+                ctx.font = '28px "Courier New", monospace';
+                ctx.fillStyle = '#dd9988';
+                ctx.shadowBlur = 30;
+                ctx.fillText('klik "RESPAWN" untuk bangkit', 450, 350);
+                ctx.shadowBlur = 0;
+                ctx.textAlign = 'left';
+            }
+
+            // ---- INFO ----
+            ctx.font = '13px "Courier New", monospace';
+            ctx.fillStyle = '#665544';
+            ctx.globalAlpha = 0.4;
+            ctx.fillText('👻 tembak hantu! level naik tiap 8 skor', 20, 35);
+            ctx.fillText(`🔫 ${enemies.length} hantu aktif`, 20, 55);
+            ctx.globalAlpha = 1;
+
+            ctx.restore();
+        }
+
+        // ================================================================
+        //  8.  GAME LOOP
+        // ================================================================
+        function gameLoop() {
+            update();
+            draw();
+            requestAnimationFrame(gameLoop);
+        }
+
+        // ================================================================
+        //  9.  EVENTS
+        // ================================================================
+        canvas.addEventListener('click', handleShoot);
+        canvas.addEventListener('mousemove', (e) => {
+            if (gameOver) return;
+            const rect = canvas.getBoundingClientRect();
+            const scaleX = W / rect.width;
+            const scaleY = H / rect.height;
+            let mx = (e.clientX - rect.left) * scaleX;
+            let my = (e.clientY - rect.top) * scaleY;
+            mx = Math.min(W, Math.max(0, mx));
+            my = Math.min(H, Math.max(0, my));
+            player.x = mx;
+            player.y = my;
+        });
+
+        canvas.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            handleShoot(e);
+        });
+        canvas.addEventListener('touchmove', (e) => {
+            e.preventDefault();
+            if (gameOver) return;
+            const rect = canvas.getBoundingClientRect();
+            const scaleX = W / rect.width;
+            const scaleY = H / rect.height;
+            const t = e.touches[0];
+            let mx = (t.clientX - rect.left) * scaleX;
+            let my = (t.clientY - rect.top) * scaleY;
+            mx = Math.min(W, Math.max(0, mx));
+            my = Math.min(H, Math.max(0, my));
+            player.x = mx;
+            player.y = my;
+        }, { passive: false });
+
+        document.getElementById('restartBtn').addEventListener('click', restartGame);
+
+        // ================================================================
+        //  10. START
+        // ================================================================
+        restartGame();
+        gameLoop();
+
+        console.log('👻 NIGHT SHOOTER — HANTU URBAN (DIPERKAYA)');
+        console.log('📸 Background: 42NDST. @gbergphoto');
+        console.log('💀 Variasi hantu: normal, kecil, besar, cepat');
+        console.log('⚡ Level naik tiap 8 skor → hantu makin ganas!');
+        console.log('🌧️ Efek: hujan, kilat, partikel, screen shake');
+    </script>
+</body>
+</html>
